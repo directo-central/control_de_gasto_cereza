@@ -138,6 +138,7 @@
       <div><div class="lbl2">Licencias</div><div class="v num" id="heroLic">$0.00</div></div>
       <div><div class="lbl2">Líneas WhatsApp</div><div class="v num" id="heroWsp">$0.00</div></div>
       <div><div class="lbl2">Mensajes</div><div class="v num" id="heroMsg">$0.00</div></div>
+      <div><div class="lbl2">Respuestas Meta</div><div class="v num" id="heroResp">$0.00</div></div>
       <div><div class="lbl2">Activos este mes</div><div class="v num" id="heroAct">0</div></div>
     </div>
   </div>
@@ -158,12 +159,12 @@
   <div class="panel active" id="panel-resumen">
     <div class="tablecard">
       <table>
-        <thead><tr><th>Área</th><th class="r">Licencias</th><th class="r">Canal Wsp</th><th class="r">Mensajes Salientes WhatsApp</th><th class="r">Total</th><th class="r">SMS (S/)</th></tr></thead>
+        <thead><tr><th>Área</th><th class="r">Licencias</th><th class="r">Canal Wsp</th><th class="r">Mensajes Salientes WhatsApp</th><th class="r">Respuestas Meta</th><th class="r">Total</th><th class="r">SMS (S/)</th></tr></thead>
         <tbody id="resumenBody"></tbody>
-        <tfoot><tr class="totrow"><td>Total general</td><td class="r num" id="ftLic">$0.00</td><td class="r num" id="ftWsp">$0.00</td><td class="r num" id="ftMsg">$0.00</td><td class="r num" id="ftTot">$0.00</td><td class="r num" id="ftSms">S/ 0.00</td></tr></tfoot>
+        <tfoot><tr class="totrow"><td>Total general</td><td class="r num" id="ftLic">$0.00</td><td class="r num" id="ftWsp">$0.00</td><td class="r num" id="ftMsg">$0.00</td><td class="r num" id="ftResp">$0.00</td><td class="r num" id="ftTot">$0.00</td><td class="r num" id="ftSms">S/ 0.00</td></tr></tfoot>
       </table>
       <div id="solesNote" class="hint" style="margin-top:8px"></div>
-      <div class="hint">Licencias prorrateadas por las <b>fechas de inicio/fin</b> de cada agente: tarifa × (días activos ÷ días del mes). El <b>Canal Wsp</b> es fijo. El recargo por <b>ticketera rige desde el 15/06/2026</b>, así que junio se cobra mixto (1–14 sin recargo, 15–30 con). Toca un área para ver los agentes que la componen. Cambia de mes con las flechas.</div>
+      <div class="hint">Licencias prorrateadas por las <b>fechas de inicio/fin</b> de cada agente: tarifa × (días activos ÷ días del mes). El <b>Canal Wsp</b> es fijo. <b>Respuestas Meta</b> = cobro de Meta por cada mensaje de respuesta ($0.033, desde oct-2026), aparte de los salientes ($0.077/conv). El recargo por <b>ticketera rige desde el 15/06/2026</b>, así que junio se cobra mixto (1–14 sin recargo, 15–30 con). Toca un área para ver los agentes que la componen. Cambia de mes con las flechas.</div>
     </div>
     <div class="tablecard" style="margin-top:18px">
       <div class="panel-head"><div><h2>Por tipo de licencia</h2><p>Costo prorrateado del mes por tipo.</p></div></div>
@@ -218,6 +219,19 @@
       <div id="msgDrop" class="dropzone">Arrastra aquí uno o varios reportes .xlsx de la línea seleccionada</div>
       <div id="msgUploadStatus" class="hint" style="margin-top:6px;min-height:16px"></div>
       <div class="hint">El costo de un mes = suma de todas las líneas de ese mes. Si re-subes una línea, reemplaza solo esa línea.</div>
+    </div>
+
+    <div class="tablecard" style="margin-top:18px" id="respCard">
+      <div class="panel-head">
+        <div><h2>Cobros Meta por mensaje de respuesta</h2><p>Desde el 01/10/2026 Meta cobra cada respuesta (manual o del bot), aunque la conversación la inicie el cliente. Tarifa $0.033 por mensaje. Se toma de la línea <b>"WhatsApp mensajes de servicio"</b> de la prefactura del proveedor.</p></div>
+        <div style="display:flex;gap:8px;align-items:center"><button class="addbtn" id="respAddBtn">＋ Pegar prefactura</button></div>
+      </div>
+      <div id="respPaste" style="display:none;margin:10px 0">
+        <textarea id="respText" rows="7" style="width:100%;font-family:'Space Mono',monospace;font-size:11.5px;border:1px solid var(--hair-strong);border-radius:8px;padding:10px" placeholder="Abre el PDF de la prefactura, selecciona todo (Ctrl+A), copia y pega aquí. Solo se toman las líneas de 'mensajes de servicio'."></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center"><button class="addbtn" id="respParseBtn">Cargar</button><button class="ghostbtn" id="respCancelBtn">Cancelar</button><span id="respStatus" class="hint" style="margin:0"></span></div>
+      </div>
+      <div id="respBody"></div>
+      <div class="hint" style="margin-top:8px">Las plantillas (marketing/utilidad) de la prefactura no se suman aquí: ya están en <b>Mensajes salientes</b> a $0.077/conv. Importes sin IGV. Cambia el área de un canal con el selector.</div>
     </div>
 
     <div class="tablecard" style="margin-top:18px">
@@ -387,30 +401,34 @@ function renderResumen(){
   state.licenses.forEach(l=>{const d=diasActivos(l);if(d<=0)return;if(!det[l.area])det[l.area]=[];det[l.area].push({nombre:l.nombre||'(sin nombre)',rol:l.rol,canal:l.canal,dias:d,costo:costoLic(l)});const t=tipoOf(l);if(comp[l.area]&&comp[l.area][t]!==undefined)comp[l.area][t]++;});
   Object.values(det).forEach(arr=>arr.sort((x,y)=>y.costo-x.costo));
   const msg=msgCostByArea();
-  const areasAll=AREAS.slice();if((msg.usd['Sin asignar']||0)>0||(msg.pen['Sin asignar']||0)>0)areasAll.push('Sin asignar');
+  const rsp=respCostByArea();let trs=0;
+  const areasAll=AREAS.slice();if((msg.usd['Sin asignar']||0)>0||(msg.pen['Sin asignar']||0)>0||(rsp.usd['Sin asignar']||0)>0)areasAll.push('Sin asignar');
   let rows='';const dm=diasDelMes();
-  areasAll.forEach(a=>{const lic=(map[a]?map[a].lic:0)||0;const wsp=(map[a]?map[a].wsp:0)||0;const me=msg.usd[a]||0;const mp=msg.pen[a]||0;const tot=lic+wsp+me;tl+=lic;tw+=wsp;tm+=me;if(lic===0&&wsp===0&&me===0&&mp===0)return;
+  areasAll.forEach(a=>{const lic=(map[a]?map[a].lic:0)||0;const wsp=(map[a]?map[a].wsp:0)||0;const me=msg.usd[a]||0;const mp=msg.pen[a]||0;const rp=rsp.usd[a]||0;const tot=lic+wsp+me+rp;tl+=lic;tw+=wsp;tm+=me;trs+=rp;if(lic===0&&wsp===0&&me===0&&mp===0&&rp===0)return;
     const op=expanded.has(a);const cntLabel=comp[a]?compLabel(comp[a]):'';const dash='<span style="color:var(--muted)">—</span>';
-    rows+=`<tr class="area-row${op?' open':''}" data-area="${a}"><td class="area-name"><span class="caret">▸</span>${a}<span class="cnt">${cntLabel}</span></td><td class="r num">${fmt.format(lic)}</td><td class="r num">${fmt.format(wsp)}</td><td class="r num">${me?fmt.format(me):dash}</td><td class="r num">${fmt.format(tot)}</td><td class="r num">${mp?fmtPEN.format(mp):dash}</td></tr>`;
+    rows+=`<tr class="area-row${op?' open':''}" data-area="${a}"><td class="area-name"><span class="caret">▸</span>${a}<span class="cnt">${cntLabel}</span></td><td class="r num">${fmt.format(lic)}</td><td class="r num">${fmt.format(wsp)}</td><td class="r num">${me?fmt.format(me):dash}</td><td class="r num">${rp?fmt.format(rp):dash}</td><td class="r num">${fmt.format(tot)}</td><td class="r num">${mp?fmtPEN.format(mp):dash}</td></tr>`;
     const dd=det[a]||[];
-    rows+=`<tr class="detail" style="${op?'':'display:none'}"><td colspan="6"><div class="agentlist">`+
-      (dd.length?dd.map(x=>`<div class="agent"><span class="an">${esc(x.nombre)}</span><span class="am">${x.rol} · ${x.canal}${x.dias<dm?` · ${x.dias} d`:''}</span><span class="ac">${fmt.format(x.costo)}</span></div>`).join(''):((me>0||mp>0)?'':`<div class="agent"><span class="am">Sin agentes activos este mes</span></div>`))+
+    rows+=`<tr class="detail" style="${op?'':'display:none'}"><td colspan="7"><div class="agentlist">`+
+      (dd.length?dd.map(x=>`<div class="agent"><span class="an">${esc(x.nombre)}</span><span class="am">${x.rol} · ${x.canal}${x.dias<dm?` · ${x.dias} d`:''}</span><span class="ac">${fmt.format(x.costo)}</span></div>`).join(''):((me>0||mp>0||rp>0)?'':`<div class="agent"><span class="am">Sin agentes activos este mes</span></div>`))+
       (me>0?`<div class="agent"><span class="an" style="color:var(--muted)">Mensajes WhatsApp (US$)</span><span class="am">${fmtConv(msg.countsUsd[a]||0)} conv</span><span class="ac">${fmt.format(me)}</span></div>`:'')+
+      (rp>0?`<div class="agent"><span class="an" style="color:var(--muted)">Cobro Meta · mensajes de respuesta</span><span class="am">${fmtConv(rsp.counts[a]||0)} msj</span><span class="ac">${fmt.format(rp)}</span></div>`:'')+
       (mp>0?`<div class="agent"><span class="an" style="color:var(--muted)">SMS (soles)</span><span class="am">${fmtConv(msg.countsPen[a]||0)} SMS</span><span class="ac">${fmtPEN.format(mp)}</span></div>`:'')+
       `</div></td></tr>`;});
-  body.innerHTML=rows||`<tr><td colspan="6" class="empty">Sin consumo este mes.</td></tr>`;
+  body.innerHTML=rows||`<tr><td colspan="7" class="empty">Sin consumo este mes.</td></tr>`;
   const penTot=Object.values(msg.pen).reduce((s,v)=>s+v,0);
   document.getElementById('ftLic').textContent=fmt.format(tl);
   document.getElementById('ftWsp').textContent=fmt.format(tw);
   document.getElementById('ftMsg').textContent=fmt.format(tm);
-  document.getElementById('ftTot').textContent=fmt.format(tl+tw+tm);
+  const fr=document.getElementById('ftResp');if(fr)fr.textContent=fmt.format(trs);
+  document.getElementById('ftTot').textContent=fmt.format(tl+tw+tm+trs);
   const fsms=document.getElementById('ftSms');if(fsms)fsms.textContent=fmtPEN.format(penTot);
   const sn=document.getElementById('solesNote');if(sn)sn.innerHTML='';
-  document.getElementById('heroTotal').textContent=(tl+tw+tm).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('heroTotal').textContent=(tl+tw+tm+trs).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
   const hp=document.getElementById('heroPen');if(hp)hp.textContent=penTot>0?('+ '+fmtPEN.format(penTot)):'';
   document.getElementById('heroLic').textContent=fmt.format(tl);
   document.getElementById('heroWsp').textContent=fmt.format(tw);
   const hm=document.getElementById('heroMsg');if(hm)hm.textContent=fmt.format(tm);
+  const hr=document.getElementById('heroResp');if(hr)hr.textContent=fmt.format(trs);
   document.getElementById('heroAct').textContent=activos;
   renderResumenTipo();
 }
@@ -464,10 +482,13 @@ function renderResumenTipo(){
   const opM=expandedT.has('__msg');
   rows+=`<tr class="tipo-row${opM?' open':''}" data-tipo="__msg"><td class="area-name"><span class="caret">▸</span>Mensajes salientes WhatsApp</td><td class="r num" style="color:var(--muted)">$0.077/conv</td><td class="r num">${msg.convUsd}</td><td class="r num">${fmt.format(usdTot)}</td><td class="r num">${dash}</td></tr>`;
   rows+=`<tr class="detail" style="${opM?'':'display:none'}"><td colspan="5"><div class="agentlist">`+(msg.convUsd?Object.keys(msg.usd).filter(a=>msg.usd[a]>0).sort((a,b)=>msg.usd[b]-msg.usd[a]).map(a=>`<div class="agent"><span class="an">${a}</span><span class="am">${fmtConv(msg.countsUsd[a]||0)} conv</span><span class="ac">${fmt.format(msg.usd[a])}</span></div>`).join(''):`<div class="agent"><span class="am">Sin mensajes este mes</span></div>`)+`</div></td></tr>`;
+  const rsp=respCostByArea();const respTot=Object.values(rsp.usd).reduce((s,v)=>s+v,0);const opR=expandedT.has('__resp');
+  rows+=`<tr class="tipo-row${opR?' open':''}" data-tipo="__resp"><td class="area-name"><span class="caret">▸</span>Cobros Meta por mensaje de respuesta</td><td class="r num" style="color:var(--muted)">$0.033/msj</td><td class="r num">${rsp.n}</td><td class="r num">${fmt.format(respTot)}</td><td class="r num">${dash}</td></tr>`;
+  rows+=`<tr class="detail" style="${opR?'':'display:none'}"><td colspan="5"><div class="agentlist">`+(rsp.n?Object.keys(rsp.usd).filter(a=>rsp.usd[a]>0).sort((a,b)=>rsp.usd[b]-rsp.usd[a]).map(a=>`<div class="agent"><span class="an">${a}</span><span class="am">${fmtConv(rsp.counts[a]||0)} msj</span><span class="ac">${fmt.format(rsp.usd[a])}</span></div>`).join(''):`<div class="agent"><span class="am">Sin cobros de respuesta este mes</span></div>`)+`</div></td></tr>`;
   const opS=expandedT.has('__sms');
   rows+=`<tr class="tipo-row${opS?' open':''}" data-tipo="__sms"><td class="area-name"><span class="caret">▸</span>SMS</td><td class="r num" style="color:var(--muted)">S/0.045</td><td class="r num">${msg.convPen}</td><td class="r num">${dash}</td><td class="r num">${fmtPEN.format(penTot)}</td></tr>`;
   rows+=`<tr class="detail" style="${opS?'':'display:none'}"><td colspan="5"><div class="agentlist">`+(msg.convPen?Object.keys(msg.pen).filter(a=>msg.pen[a]>0).sort((a,b)=>msg.pen[b]-msg.pen[a]).map(a=>`<div class="agent"><span class="an">${a}</span><span class="am">${fmtConv(msg.countsPen[a]||0)} SMS</span><span class="ac">${fmtPEN.format(msg.pen[a])}</span></div>`).join(''):`<div class="agent"><span class="am">Sin SMS este mes</span></div>`)+`</div></td></tr>`;
-  tC+=tw+usdTot;
+  tC+=tw+usdTot+respTot;
   document.getElementById('tipoBody').innerHTML=rows;
   document.getElementById('ftTipoN').textContent=tN;
   document.getElementById('ftTipoTot').textContent=fmt.format(tC);
@@ -558,7 +579,7 @@ function parseSmsFile(file){
     rd.onerror=()=>reject(new Error('No se pudo leer el archivo'));
     rd.readAsArrayBuffer(file);});
 }
-function renderMensajes(){
+function renderMensajes(){try{renderResp();}catch(e){}
   const M=state.msg||{lines:{},plantillaMap:{},canalMap:{}};const lines=M.lines||{};const ym=ymKey();
   const sel=document.getElementById('msgLineSel');if(sel){const prev=sel.value;sel.innerHTML=Object.keys(lines).map(id=>`<option value="${esc(id)}">${esc(lines[id].label||id)}</option>`).join('')+`<option value="__new__">➕ Nueva línea…</option>`;if(prev&&(lines[prev]||prev==='__new__'))sel.value=prev;else if(!Object.keys(lines).length)sel.value='__new__';}
   updateLineDesc();
@@ -603,12 +624,53 @@ const LINE_DESCS={operaciones:'Todos los mensajes salientes que NO son de Afilia
 function descOf(L){if(!L)return '';if(L.desc)return L.desc;if(L.kind==='sms')return 'Todos los SMS'+(L.mode&&L.mode!=='plantilla'?' — solo '+L.mode+'.':'.');if(L.mode&&L.mode!=='plantilla')return 'Todo su costo va a '+L.mode+'.';return 'Se reparte por plantilla → centro de costo.';}
 function updateLineDesc(){const sel=document.getElementById('msgLineSel');const ld=document.getElementById('lineDesc');if(!sel||!ld)return;const id=sel.value;const L=(state.msg&&state.msg.lines)?state.msg.lines[id]:null;ld.textContent=L?descOf(L):(id==='__new__'?'Se creará una nueva línea al subir el reporte.':'');}
 function cleanCanal(c){return String(c||"").replace(/^[0-9a-f]{16,}-/i,"");}
-function normalizeMsg(){state.msg=state.msg||{lines:{},plantillaMap:{},canalMap:{},plantillaCanal:{}};state.msg.lines=state.msg.lines||{};state.msg.plantillaMap=state.msg.plantillaMap||{};state.msg.canalMap=state.msg.canalMap||{};state.msg.plantillaCanal=state.msg.plantillaCanal||{};Object.keys(state.msg.lines).forEach(id=>{const L=state.msg.lines[id];if(L.cost==null)L.cost=0.077;if(!L.currency)L.currency='USD';if(!L.kind)L.kind='whatsapp';if(!L.desc&&LINE_DESCS[id])L.desc=LINE_DESCS[id];});}
+function normalizeMsg(){state.msg=state.msg||{lines:{},plantillaMap:{},canalMap:{},plantillaCanal:{}};try{ensureRespSeed();}catch(e){}state.msg.lines=state.msg.lines||{};state.msg.plantillaMap=state.msg.plantillaMap||{};state.msg.canalMap=state.msg.canalMap||{};state.msg.plantillaCanal=state.msg.plantillaCanal||{};Object.keys(state.msg.lines).forEach(id=>{const L=state.msg.lines[id];if(L.cost==null)L.cost=0.077;if(!L.currency)L.currency='USD';if(!L.kind)L.kind='whatsapp';if(!L.desc&&LINE_DESCS[id])L.desc=LINE_DESCS[id];});}
 let _pushT=null;let cloudOK=false;
 async function flashSaved(){const s=document.getElementById('saveMapsStatus');if(s)s.innerHTML='Guardando…';const ok=await pushData();if(s)s.innerHTML=ok?'<b style="color:var(--ok)">✓ Guardado</b>':'<b style="color:#B5732A">⚠ No se pudo guardar</b>';}
 function scheduleCloudSave(){if(!cloudOK)return;if(!state.apiUrl)return;clearTimeout(_pushT);_pushT=setTimeout(pushData,1500);}
 async function pushData(){if(!state.apiUrl||!cloudOK)return false;try{const res=await fetch(state.apiUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({datos:state.msg,plantillaMap:state.msg.plantillaMap,canalMap:state.msg.canalMap})});return res.ok;}catch(e){return false;}}
-function renderAll(){renderMonthLabel();renderResumen();renderLicencias();renderWsp();renderMensajes();}
+
+// ============ COBROS META POR MENSAJE DE RESPUESTA ($0.033) ============
+const RESP_RATE=0.033;
+const RESP_SEED={"2026-10":[
+ {"pf":"PF-000035","canal":"Ciudad_celular","n":39765,"importe":1312.25},
+ {"pf":"PF-000035","canal":"Ciudad_fijo","n":11053,"importe":364.75},
+ {"pf":"PF-000035","canal":"Supply_celular","n":10068,"importe":332.24},
+ {"pf":"PF-000036","canal":"whatsapp - afiliacion","n":5522,"importe":182.23}]};
+function respStore(){if(!state.msg)state.msg={lines:{},plantillaMap:{},canalMap:{},plantillaCanal:{}};state.msg.respuestas=state.msg.respuestas||{};state.msg.respCanalArea=state.msg.respCanalArea||{};state.msg.respSeeded=state.msg.respSeeded||{};return state.msg;}
+function ensureRespSeed(){const M=respStore();Object.keys(RESP_SEED).forEach(ym=>{if(M.respSeeded[ym])return;if(!M.respuestas[ym]||!M.respuestas[ym].length)M.respuestas[ym]=JSON.parse(JSON.stringify(RESP_SEED[ym]));M.respSeeded[ym]=true;});}
+function respAreaOf(canal){const M=respStore();if(M.respCanalArea[canal])return M.respCanalArea[canal];const cm=M.canalMap||{};if(cm[canal]&&cm[canal]!=='Aerolíneas')return cm[canal];const c=(canal||'').toLowerCase();if(c.indexOf('afili')>=0)return 'Afiliación';const sg=suggestCeco('',canal);return sg==='Aerolíneas'?'Sin asignar':sg;}
+function respItems(ym){return respStore().respuestas[ym]||[];}
+function respCostByArea(){const usd={},counts={};let n=0;respItems(ymKey()).forEach(it=>{const a=respAreaOf(it.canal);const amt=(it.importe!=null?+it.importe:(+it.n||0)*RESP_RATE);usd[a]=(usd[a]||0)+amt;counts[a]=(counts[a]||0)+(+it.n||0);n+=(+it.n||0);});return {usd,counts,n};}
+function respNum(x){return parseFloat(String(x).replace(/,/g,''))||0;}
+function respParse(text){
+  const t=text.replace(/ /g,' ');const items=[];
+  const pf=(t.match(/PF-\d+/)||[''])[0];
+  const re=/^\s*WhatsApp\s+mensajes\s+de\s+servicio\s+(.+?)\s+(\d[\d,]*)\s+(\d+(?:\.\d+)?)\s+(\d[\d,]*\.\d{1,2})\s*$/i;
+  t.split(/\r?\n/).forEach(l=>{const m=l.match(re);if(m)items.push({pf,canal:m[1].replace(/\s+/g,' ').trim(),n:respNum(m[2]),importe:respNum(m[4])});});
+  if(!items.length)throw new Error('No encontré líneas "WhatsApp mensajes de servicio" en el texto pegado.');
+  const per=t.match(/\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(\d{4})/i);
+  let ym=null;if(per){const mi=MESES.indexOf(per[1].toLowerCase().replace('setiembre','septiembre'));ym=per[2]+'-'+String(mi+1).padStart(2,'0');}
+  return {ym,items,pf};
+}
+function renderResp(){
+  const box=document.getElementById('respBody');if(!box)return;const items=respItems(ymKey());
+  if(!items.length){box.innerHTML=`<div class="empty" style="padding:18px">Sin cobros de respuesta cargados para ${MESES[sel.m]} ${sel.y}.</div>`;return;}
+  const opts=c=>{const v=respAreaOf(c);return `<select class="respArea" data-canal="${esc(c)}">`+AREAS.concat(['Sin asignar']).map(a=>`<option ${a===v?'selected':''}>${a}</option>`).join('')+`</select>`;};
+  let tn=0,tm=0;
+  box.innerHTML=`<table><thead><tr><th>Prefactura</th><th>Canal</th><th>Área</th><th class="r">Mensajes</th><th class="r">Tarifa</th><th class="r">Importe</th><th></th></tr></thead><tbody>`+
+    items.map((it,i)=>{const amt=(it.importe!=null?+it.importe:(+it.n||0)*RESP_RATE);tn+=(+it.n||0);tm+=amt;return `<tr><td>${esc(it.pf||'—')}</td><td>${esc(it.canal)}</td><td>${opts(it.canal)}</td><td class="r num">${(+it.n||0).toLocaleString('en-US')}</td><td class="r num">$${RESP_RATE.toFixed(3)}</td><td class="r num">${fmt.format(amt)}</td><td class="r"><button class="del respDel" data-i="${i}" title="Eliminar">✕</button></td></tr>`;}).join('')+
+    `</tbody><tfoot><tr class="totrow"><td colspan="3">Total del mes (sin IGV)</td><td class="r num">${tn.toLocaleString('en-US')}</td><td></td><td class="r num">${fmt.format(tm)}</td><td></td></tr></tfoot></table>`;
+}
+document.addEventListener('click',async e=>{
+  const id=e.target&&e.target.id;
+  if(id==='respAddBtn'){const b=document.getElementById('respPaste');b.style.display=b.style.display==='none'?'block':'none';document.getElementById('respStatus').textContent='';}
+  else if(id==='respCancelBtn'){document.getElementById('respPaste').style.display='none';}
+  else if(id==='respParseBtn'){const st=document.getElementById('respStatus');try{const r=respParse(document.getElementById('respText').value);const ym=r.ym||ymKey();const M=respStore();const cur=(M.respuestas[ym]||[]).filter(x=>!(r.pf&&x.pf===r.pf));M.respuestas[ym]=cur.concat(r.items);M.respSeeded[ym]=true;await save();const p=ym.split('-');sel={y:+p[0],m:+p[1]-1};renderAll();if(state.apiUrl){try{await pushData();}catch(_){}}document.getElementById('respText').value='';document.getElementById('respPaste').style.display='none';}catch(err){st.innerHTML='<b style="color:#B5732A">⚠ '+err.message+'</b>';}}
+  else if(e.target.classList&&e.target.classList.contains('respDel')){const ym=ymKey();const arr=respItems(ym);const i=+e.target.dataset.i;if(arr[i]&&confirm('¿Eliminar el cobro de '+arr[i].canal+'?')){arr.splice(i,1);respStore().respSeeded[ym]=true;await save();renderAll();}}
+});
+document.addEventListener('change',async e=>{if(e.target.classList&&e.target.classList.contains('respArea')){respStore().respCanalArea[e.target.dataset.canal]=e.target.value;await save();renderAll();}});
+function renderAll(){ensureRespSeed();renderMonthLabel();renderResumen();renderLicencias();renderWsp();renderMensajes();renderResp();}
 
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));

@@ -252,6 +252,15 @@
     </div>
 
     <div class="tablecard" style="margin-top:18px">
+      <div class="panel-head">
+        <div><h2>Detalle por plantilla · mes a mes</h2><p>Mensajes salientes de WhatsApp por plantilla en cada mes cargado (Operaciones + Afiliaciones). Al final, el costo de cada mes.</p></div>
+        <div style="display:flex;gap:8px;align-items:center"><select id="pdLine" style="width:auto"><option value="__all">Todas las líneas WhatsApp</option></select><button class="ghostbtn" id="pdCsv">⭳ Descargar CSV</button></div>
+      </div>
+      <div id="pdBody" style="overflow-x:auto;margin-top:6px"></div>
+      <div class="hint" style="margin-top:8px">"(sin plantilla)" = mensajes cargados solo por canal (p. ej. oct-2026 desde la prefactura). Al subir el reporte .xlsx del mes, se reemplaza por el detalle por plantilla.</div>
+    </div>
+
+    <div class="tablecard" style="margin-top:18px">
       <div class="panel-head"><div><h2>Canal → Centro de costo</h2><p>Se usa solo cuando el saliente no trae plantilla.</p></div></div>
       <table><thead><tr><th>Canal</th><th>Área</th></tr></thead><tbody id="canalMapBody"></tbody></table>
     </div>
@@ -582,7 +591,7 @@ function parseSmsFile(file){
     rd.onerror=()=>reject(new Error('No se pudo leer el archivo'));
     rd.readAsArrayBuffer(file);});
 }
-function renderMensajes(){try{renderResp();}catch(e){}
+function renderMensajes(){try{renderResp();}catch(e){}try{renderPlantillaDetalle();}catch(e){}
   const M=state.msg||{lines:{},plantillaMap:{},canalMap:{}};const lines=M.lines||{};const ym=ymKey();
   const sel=document.getElementById('msgLineSel');if(sel){const prev=sel.value;sel.innerHTML=Object.keys(lines).map(id=>`<option value="${esc(id)}">${esc(lines[id].label||id)}</option>`).join('')+`<option value="__new__">➕ Nueva línea…</option>`;if(prev&&(lines[prev]||prev==='__new__'))sel.value=prev;else if(!Object.keys(lines).length)sel.value='__new__';}
   updateLineDesc();
@@ -679,6 +688,41 @@ document.addEventListener('click',async e=>{
   else if(e.target.classList&&e.target.classList.contains('respDel')){const ym=ymKey();const arr=respItems(ym);const i=+e.target.dataset.i;if(arr[i]&&confirm('¿Eliminar el cobro de '+arr[i].canal+'?')){arr.splice(i,1);respStore().respSeeded[ym]=true;await save();renderAll();}}
 });
 document.addEventListener('change',async e=>{if(e.target.classList&&e.target.classList.contains('respArea')){respStore().respCanalArea[e.target.dataset.canal]=e.target.value;await save();renderAll();}});
+
+// ============ DETALLE POR PLANTILLA MES A MES ============
+function pdData(){
+  const M=state.msg||{lines:{}};const lines=M.lines||{};const sel=(document.getElementById('pdLine')||{}).value||'__all';
+  const pm=M.plantillaMap||{},pc=M.plantillaCanal||{},cm=M.canalMap||{};
+  const ids=Object.keys(lines).filter(id=>(lines[id].kind||'whatsapp')==='whatsapp'&&(sel==='__all'||sel===id));
+  const months=new Set();ids.forEach(id=>Object.keys(lines[id].months||{}).forEach(m=>months.add(m)));
+  const mList=[...months].sort();const rows={};const cost={};const tot={};
+  ids.forEach(id=>{const L=lines[id];mList.forEach(ym=>{const m=(L.months||{})[ym];if(!m)return;const u=msgUnit(L,ym,m);
+    const add=(key,canal,area,n)=>{if(!rows[key])rows[key]={plantilla:key,canal:canal,area:area,m:{}};rows[key].m[ym]=(rows[key].m[ym]||0)+n;tot[ym]=(tot[ym]||0)+n;cost[ym]=(cost[ym]||0)+n*u;};
+    const areaFix=a=>L.mode==='plantilla'?a:L.mode;
+    Object.keys(m.plantillas||{}).forEach(p=>add(p,pc[p]||'',areaFix(pm[p]||'Sin asignar'),m.plantillas[p]));
+    Object.keys(m.sinPlantilla||{}).forEach(c=>add('(sin plantilla) '+c,c,areaFix(cm[c]||'Sin asignar'),m.sinPlantilla[c]));});});
+  const list=Object.values(rows).sort((a,b)=>{const ta=Object.values(b.m).reduce((s,v)=>s+v,0)-Object.values(a.m).reduce((s,v)=>s+v,0);return ta||a.plantilla.localeCompare(b.plantilla);});
+  return {mList,list,tot,cost};
+}
+function pdLbl(k){const p=k.split('-');return MESES[+p[1]-1].slice(0,3).replace(/^./,c=>c.toUpperCase())+" '"+p[0].slice(2);}
+function renderPlantillaDetalle(){
+  const box=document.getElementById('pdBody');if(!box)return;
+  const selEl=document.getElementById('pdLine');if(selEl){const prev=selEl.value;const lines=(state.msg&&state.msg.lines)||{};selEl.innerHTML='<option value="__all">Todas las líneas WhatsApp</option>'+Object.keys(lines).filter(id=>(lines[id].kind||'whatsapp')==='whatsapp').map(id=>`<option value="${esc(id)}">${esc(lines[id].label||id)}</option>`).join('');selEl.value=[...selEl.options].some(o=>o.value===prev)?prev:'__all';}
+  const d=pdData();if(!d.mList.length){box.innerHTML='<div class="empty" style="padding:18px">Aún no hay cargas de WhatsApp.</div>';return;}
+  const cur=ymKey();const nf=v=>v?v.toLocaleString('en-US'):'<span style="color:var(--muted)">·</span>';
+  const th=d.mList.map(k=>`<th class="r" style="${k===cur?'color:var(--cereza)':''}">${pdLbl(k)}</th>`).join('');
+  box.innerHTML=`<table><thead><tr><th>Plantilla</th><th>Canal</th><th>Área</th>${th}<th class="r">Total</th></tr></thead><tbody>`+
+   d.list.map(r=>{const t=Object.values(r.m).reduce((s,v)=>s+v,0);return `<tr><td class="area-name" style="white-space:nowrap">${esc(r.plantilla)}</td><td style="color:var(--muted);font-size:12px">${esc(r.canal||'—')}</td><td>${esc(r.area)}</td>`+d.mList.map(k=>`<td class="r num">${nf(r.m[k]||0)}</td>`).join('')+`<td class="r num"><b>${t.toLocaleString('en-US')}</b></td></tr>`;}).join('')+
+   `</tbody><tfoot><tr class="totrow"><td colspan="3">Total mensajes</td>`+d.mList.map(k=>`<td class="r num">${(d.tot[k]||0).toLocaleString('en-US')}</td>`).join('')+`<td class="r num">${Object.values(d.tot).reduce((s,v)=>s+v,0).toLocaleString('en-US')}</td></tr>`+
+   `<tr class="totrow"><td colspan="3">Costo salientes (US$)</td>`+d.mList.map(k=>`<td class="r num">${fmt.format(d.cost[k]||0)}</td>`).join('')+`<td class="r num">${fmt.format(Object.values(d.cost).reduce((s,v)=>s+v,0))}</td></tr></tfoot></table>`;
+}
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='pdLine')renderPlantillaDetalle();});
+document.addEventListener('click',e=>{if(!(e.target&&e.target.id==='pdCsv'))return;const d=pdData();const q=v=>'"'+String(v).replace(/"/g,'""')+'"';
+  const lines=[['Plantilla','Canal','Área'].concat(d.mList).concat(['Total']).map(q).join(',')];
+  d.list.forEach(r=>{const t=Object.values(r.m).reduce((s,v)=>s+v,0);lines.push([r.plantilla,r.canal,r.area].map(q).concat(d.mList.map(k=>r.m[k]||0)).concat([t]).join(','));});
+  lines.push([q('Total mensajes'),'',''].concat(d.mList.map(k=>d.tot[k]||0)).join(','));
+  lines.push([q('Costo salientes US$'),'',''].concat(d.mList.map(k=>(d.cost[k]||0).toFixed(2))).join(','));
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='cereza_plantillas_mes_a_mes.csv';document.body.appendChild(a);a.click();a.remove();});
 function renderAll(){ensureRespSeed();renderMonthLabel();renderResumen();renderLicencias();renderWsp();renderMensajes();renderResp();}
 
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{

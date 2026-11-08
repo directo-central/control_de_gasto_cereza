@@ -209,18 +209,6 @@
 
   <div class="panel" id="panel-mensajes">
     <div id="msgAlert" class="alertbox" style="display:none"></div>
-    <div class="tablecard" id="pfCard" style="margin-bottom:18px">
-      <div class="panel-head">
-        <div><h2>Prefactura WhatsApp API (Meta)</h2><p>Desde oct-2026 Meta cobra cada mensaje (plantillas y respuestas). Si el mes tiene prefactura, <b>Mensajes</b> usa estos importes reales (sin IGV) en lugar del estimado de $0.077/conv.</p></div>
-        <div style="display:flex;gap:8px;align-items:center"><button class="addbtn" id="pfAddBtn">＋ Pegar prefactura</button></div>
-      </div>
-      <div id="pfPaste" style="display:none;margin:10px 0">
-        <textarea id="pfText" rows="8" style="width:100%;font-family:'Space Mono',monospace;font-size:11.5px;border:1px solid var(--hair-strong);border-radius:8px;padding:10px" placeholder="Abre el PDF de la prefactura, selecciona todo (Ctrl+A), copia (Ctrl+C) y pega aquí."></textarea>
-        <div style="display:flex;gap:8px;margin-top:8px;align-items:center"><button class="addbtn" id="pfParseBtn">Cargar</button><button class="ghostbtn" id="pfCancelBtn">Cancelar</button><span id="pfStatus" class="hint" style="margin:0"></span></div>
-      </div>
-      <div id="pfBody"></div>
-      <div class="hint" style="margin-top:8px">Cada canal se asigna a un área (centro de costo); puedes cambiarla con el selector. El IGV se muestra como referencia y no se suma al consumo, igual que las licencias.</div>
-    </div>
     <div class="tablecard">
       <div class="panel-head">
         <div><h2>Mensajes salientes</h2><p>Cada conversación iniciada cuesta $0.077. Elige la línea y sube su reporte.</p></div>
@@ -474,7 +462,7 @@ function renderResumenTipo(){
   rows+=`<tr class="detail" style="${opW?'':'display:none'}"><td colspan="5"><div class="agentlist">`+AREAS.filter(a=>+(state.wsp[a]||0)>0).map(a=>`<div class="agent"><span class="an">${a}</span><span class="am"></span><span class="ac">${fmt.format(state.wsp[a])}</span></div>`).join('')+`</div></td></tr>`;
   const msg=msgCostByArea();const usdTot=Object.values(msg.usd).reduce((s,v)=>s+v,0);const penTot=Object.values(msg.pen).reduce((s,v)=>s+v,0);
   const opM=expandedT.has('__msg');
-  rows+=`<tr class="tipo-row${opM?' open':''}" data-tipo="__msg"><td class="area-name"><span class="caret">▸</span>${msg.pf?'WhatsApp API (prefactura Meta)':'Mensajes salientes WhatsApp'}</td><td class="r num" style="color:var(--muted)">${msg.pf?'sin IGV':'$0.077/conv'}</td><td class="r num">${msg.convUsd}</td><td class="r num">${fmt.format(usdTot)}</td><td class="r num">${dash}</td></tr>`;
+  rows+=`<tr class="tipo-row${opM?' open':''}" data-tipo="__msg"><td class="area-name"><span class="caret">▸</span>Mensajes salientes WhatsApp</td><td class="r num" style="color:var(--muted)">$0.077/conv</td><td class="r num">${msg.convUsd}</td><td class="r num">${fmt.format(usdTot)}</td><td class="r num">${dash}</td></tr>`;
   rows+=`<tr class="detail" style="${opM?'':'display:none'}"><td colspan="5"><div class="agentlist">`+(msg.convUsd?Object.keys(msg.usd).filter(a=>msg.usd[a]>0).sort((a,b)=>msg.usd[b]-msg.usd[a]).map(a=>`<div class="agent"><span class="an">${a}</span><span class="am">${fmtConv(msg.countsUsd[a]||0)} conv</span><span class="ac">${fmt.format(msg.usd[a])}</span></div>`).join(''):`<div class="agent"><span class="am">Sin mensajes este mes</span></div>`)+`</div></td></tr>`;
   const opS=expandedT.has('__sms');
   rows+=`<tr class="tipo-row${opS?' open':''}" data-tipo="__sms"><td class="area-name"><span class="caret">▸</span>SMS</td><td class="r num" style="color:var(--muted)">S/0.045</td><td class="r num">${msg.convPen}</td><td class="r num">${dash}</td><td class="r num">${fmtPEN.format(penTot)}</td></tr>`;
@@ -493,7 +481,6 @@ function fmtConv(v){return Number.isInteger(v)?v:(Math.round(v*10)/10);}
 function split3Money(x){var cents=Math.round(x*100);var base=Math.floor(cents/3);var rem=cents-base*3;return [(base+rem)/100,base/100,base/100];}
 function split3Count(n){var base=Math.floor(n/3);var rem=n-base*3;return [base+rem,base,base];}
 function msgCostByArea(){
-  const pfr=pfCostByArea(ymKey());if(pfr)return pfr;
   const usd={},pen={},countsUsd={},countsPen={};let convUsd=0,convPen=0;
   const aeroUsd={amt:0,n:0},aeroPen={amt:0,n:0};
   function add(a,n,amt,cur){
@@ -571,7 +558,7 @@ function parseSmsFile(file){
     rd.onerror=()=>reject(new Error('No se pudo leer el archivo'));
     rd.readAsArrayBuffer(file);});
 }
-function renderMensajes(){try{renderPrefact();}catch(e){}
+function renderMensajes(){
   const M=state.msg||{lines:{},plantillaMap:{},canalMap:{}};const lines=M.lines||{};const ym=ymKey();
   const sel=document.getElementById('msgLineSel');if(sel){const prev=sel.value;sel.innerHTML=Object.keys(lines).map(id=>`<option value="${esc(id)}">${esc(lines[id].label||id)}</option>`).join('')+`<option value="__new__">➕ Nueva línea…</option>`;if(prev&&(lines[prev]||prev==='__new__'))sel.value=prev;else if(!Object.keys(lines).length)sel.value='__new__';}
   updateLineDesc();
@@ -616,77 +603,12 @@ const LINE_DESCS={operaciones:'Todos los mensajes salientes que NO son de Afilia
 function descOf(L){if(!L)return '';if(L.desc)return L.desc;if(L.kind==='sms')return 'Todos los SMS'+(L.mode&&L.mode!=='plantilla'?' — solo '+L.mode+'.':'.');if(L.mode&&L.mode!=='plantilla')return 'Todo su costo va a '+L.mode+'.';return 'Se reparte por plantilla → centro de costo.';}
 function updateLineDesc(){const sel=document.getElementById('msgLineSel');const ld=document.getElementById('lineDesc');if(!sel||!ld)return;const id=sel.value;const L=(state.msg&&state.msg.lines)?state.msg.lines[id]:null;ld.textContent=L?descOf(L):(id==='__new__'?'Se creará una nueva línea al subir el reporte.':'');}
 function cleanCanal(c){return String(c||"").replace(/^[0-9a-f]{16,}-/i,"");}
-function normalizeMsg(){state.msg=state.msg||{lines:{},plantillaMap:{},canalMap:{},plantillaCanal:{}};try{ensurePfSeed();}catch(e){}state.msg.lines=state.msg.lines||{};state.msg.plantillaMap=state.msg.plantillaMap||{};state.msg.canalMap=state.msg.canalMap||{};state.msg.plantillaCanal=state.msg.plantillaCanal||{};Object.keys(state.msg.lines).forEach(id=>{const L=state.msg.lines[id];if(L.cost==null)L.cost=0.077;if(!L.currency)L.currency='USD';if(!L.kind)L.kind='whatsapp';if(!L.desc&&LINE_DESCS[id])L.desc=LINE_DESCS[id];});}
+function normalizeMsg(){state.msg=state.msg||{lines:{},plantillaMap:{},canalMap:{},plantillaCanal:{}};state.msg.lines=state.msg.lines||{};state.msg.plantillaMap=state.msg.plantillaMap||{};state.msg.canalMap=state.msg.canalMap||{};state.msg.plantillaCanal=state.msg.plantillaCanal||{};Object.keys(state.msg.lines).forEach(id=>{const L=state.msg.lines[id];if(L.cost==null)L.cost=0.077;if(!L.currency)L.currency='USD';if(!L.kind)L.kind='whatsapp';if(!L.desc&&LINE_DESCS[id])L.desc=LINE_DESCS[id];});}
 let _pushT=null;let cloudOK=false;
 async function flashSaved(){const s=document.getElementById('saveMapsStatus');if(s)s.innerHTML='Guardando…';const ok=await pushData();if(s)s.innerHTML=ok?'<b style="color:var(--ok)">✓ Guardado</b>':'<b style="color:#B5732A">⚠ No se pudo guardar</b>';}
 function scheduleCloudSave(){if(!cloudOK)return;if(!state.apiUrl)return;clearTimeout(_pushT);_pushT=setTimeout(pushData,1500);}
 async function pushData(){if(!state.apiUrl||!cloudOK)return false;try{const res=await fetch(state.apiUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({datos:state.msg,plantillaMap:state.msg.plantillaMap,canalMap:state.msg.canalMap})});return res.ok;}catch(e){return false;}}
-
-// ================= PREFACTURA WHATSAPP API =================
-const PF_SEED={"2026-10":[
- {"id":"PF-000035","cliente":"Directo","emision":"02/11/2026","items":[
-  ["WhatsApp plantillas de marketing","Ciudad_celular",25,0.0778,1.95],
-  ["WhatsApp plantillas de marketing","comunicaciones_conductor",1422,0.0778,110.63],
-  ["WhatsApp plantillas de marketing","Supply_celular",39,0.0778,3.03],
-  ["WhatsApp plantillas de utilidad","Ciudad_celular",110,0.0330,3.63],
-  ["WhatsApp plantillas de utilidad","Ciudad_fijo",6535,0.0330,215.66],
-  ["WhatsApp plantillas de utilidad","comunicaciones_conductor",610,0.0330,20.13],
-  ["WhatsApp plantillas de utilidad","Supply_celular",229,0.0330,7.56],
-  ["WhatsApp mensajes de servicio","Ciudad_celular",39765,0.0330,1312.25],
-  ["WhatsApp mensajes de servicio","Ciudad_fijo",11053,0.0330,364.75],
-  ["WhatsApp mensajes de servicio","Supply_celular",10068,0.0330,332.24],
-  ["SMS (unidades)","SMS Directo",105,0.0170,1.79]],"subtotal":2373.62,"igv":427.25,"total":2800.87},
- {"id":"PF-000036","cliente":"Directo-Afiliaciones","emision":"01/11/2026","items":[
-  ["WhatsApp plantillas de marketing","whatsapp - afiliacion",96,0.0778,7.47],
-  ["WhatsApp plantillas de utilidad","whatsapp - afiliacion",37,0.0330,1.22],
-  ["WhatsApp mensajes de servicio","whatsapp - afiliacion",5522,0.0330,182.23]],"subtotal":190.92,"igv":34.37,"total":225.29}
-]};
-function pfStore(){if(!state.msg)state.msg={lines:{},plantillaMap:{},canalMap:{},plantillaCanal:{}};state.msg.prefacturas=state.msg.prefacturas||{};state.msg.pfCanalArea=state.msg.pfCanalArea||{};state.msg.pfSeeded=state.msg.pfSeeded||{};return state.msg;}
-function ensurePfSeed(){const M=pfStore();Object.keys(PF_SEED).forEach(ym=>{if(M.pfSeeded[ym])return;const cur=M.prefacturas[ym]||[];PF_SEED[ym].forEach(d=>{if(!cur.some(x=>x.id===d.id))cur.push(JSON.parse(JSON.stringify(d)));});M.prefacturas[ym]=cur;M.pfSeeded[ym]=true;});}
-function pfAreaOf(canal){const M=pfStore();if(M.pfCanalArea[canal])return M.pfCanalArea[canal];const cm=M.canalMap||{};if(cm[canal]&&cm[canal]!=='Aerolíneas')return cm[canal];const c=(canal||'').toLowerCase();if(c.indexOf('afili')>=0)return 'Afiliación';if(c.indexOf('sms')>=0)return 'Ciudad';const sg=suggestCeco('',canal);return sg==='Aerolíneas'?'Sin asignar':sg;}
-function pfDocs(ym){const M=pfStore();return M.prefacturas[ym]||[];}
-function pfCostByArea(ym){const docs=pfDocs(ym);if(!docs.length)return null;
-  const usd={},pen={},countsUsd={},countsPen={};let convUsd=0;
-  docs.forEach(d=>(d.items||[]).forEach(it=>{const a=pfAreaOf(it[1]);const n=+it[2]||0,amt=+it[4]||0;usd[a]=(usd[a]||0)+amt;countsUsd[a]=(countsUsd[a]||0)+n;convUsd+=n;}));
-  return {usd,pen,countsUsd,countsPen,convUsd,convPen:0,pf:true,docs};}
-const PF_MESES=MESES;
-function pfNum(x){return parseFloat(String(x).replace(/,/g,''))||0;}
-function pfParse(text){
-  const t=text.replace(/\u00a0/g,' ');const lines=t.split(/\r?\n/);const items=[];
-  const re=/^\s*(WhatsApp\s+plantillas\s+de\s+\S+|WhatsApp\s+mensajes\s+de\s+\S+|WhatsApp\s+conversaciones?\s+de\s+\S+|SMS\s*\(unidades\)|SMS)\s+(.+?)\s+(\d[\d,]*)\s+(\d+(?:\.\d+)?)\s+(\d[\d,]*\.\d{1,2})\s*$/i;
-  lines.forEach(l=>{const m=l.match(re);if(m)items.push([m[1].replace(/\s+/g,' ').trim(),m[2].replace(/\s+/g,' ').trim(),pfNum(m[3]),pfNum(m[4]),pfNum(m[5])]);});
-  if(!items.length)throw new Error('No encontré líneas de consumo (Concepto · Canal · Cantidad · Precio · Importe).');
-  const id=(t.match(/PF-\d+/)||[''])[0]||('PF-'+Date.now());
-  const em=(t.match(/Emisi[oó]n:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i)||['',''])[1];
-  const per=t.match(/PERIODO[\s\S]{0,200}?\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(\d{4})/i)||t.match(/\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(\d{4})/i);
-  let ym=null;if(per){const mi=PF_MESES.indexOf(per[1].toLowerCase().replace('setiembre','septiembre'));ym=per[2]+'-'+String(mi+1).padStart(2,'0');}
-  let cliente='';const cm=t.match(/CLIENTE[^\n]*\n\s*(.+)/i);if(cm)cliente=cm[1].replace(/\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+\d{4}.*$/i,'').replace(/PERIODO/i,'').trim();
-  const sub=Math.round(items.reduce((s,i)=>s+i[4],0)*100)/100;
-  const tm=t.match(/IGV[^\n]*?USD\s*([\d,]+\.\d{2})/i);const igv=tm?pfNum(tm[1]):Math.round(sub*18)/100;
-  const tt=t.match(/\bTotal\s+USD\s*([\d,]+\.\d{2})/i);const total=tt?pfNum(tt[1]):Math.round((sub+igv)*100)/100;
-  return {ym,doc:{id,cliente,emision:em,items,subtotal:sub,igv,total}};
-}
-function renderPrefact(){
-  const box=document.getElementById('pfBody');if(!box)return;const ym=ymKey();const docs=pfDocs(ym);
-  if(!docs.length){box.innerHTML=`<div class="empty" style="padding:18px">Sin prefactura para ${MESES[sel.m]} ${sel.y}. Los mensajes de este mes se estiman con los reportes subidos ($0.077/conv).</div>`;return;}
-  const areaOpts=c=>{const v=pfAreaOf(c);return `<select class="pfArea" data-canal="${esc(c)}">`+AREAS.concat(['Sin asignar']).map(a=>`<option ${a===v?'selected':''}>${a}</option>`).join('')+`</select>`;};
-  let gS=0,gI=0,gT=0;
-  box.innerHTML=docs.map((d,di)=>{gS+=+d.subtotal||0;gI+=+d.igv||0;gT+=+d.total||0;
-    return `<div style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div><b>${esc(d.id)}</b> · ${esc(d.cliente||'')}${d.emision?` · <span style="color:var(--muted)">emisión ${esc(d.emision)}</span>`:''}</div><button class="del pfDel" data-i="${di}" title="Eliminar prefactura">🗑</button></div>
-    <table><thead><tr><th>Concepto</th><th>Canal</th><th>Área</th><th class="r">Cantidad</th><th class="r">P. unit</th><th class="r">Importe</th></tr></thead><tbody>`+
-    (d.items||[]).map(it=>`<tr><td>${esc(it[0])}</td><td>${esc(it[1])}</td><td>${areaOpts(it[1])}</td><td class="r num">${(+it[2]).toLocaleString('en-US')}</td><td class="r num">${(+it[3]).toFixed(4)}</td><td class="r num">${fmt.format(+it[4])}</td></tr>`).join('')+
-    `</tbody><tfoot><tr class="totrow"><td colspan="5">Subtotal (sin IGV) · IGV ${fmt.format(+d.igv||0)} · Total ${fmt.format(+d.total||0)}</td><td class="r num">${fmt.format(+d.subtotal||0)}</td></tr></tfoot></table></div>`;}).join('')+
-    (docs.length>1?`<div class="hint" style="margin-top:10px;text-align:right"><b>Mes:</b> subtotal ${fmt.format(gS)} · IGV ${fmt.format(gI)} · total con IGV ${fmt.format(gT)}</div>`:'');
-}
-document.addEventListener('click',async e=>{
-  const id=e.target&&e.target.id;
-  if(id==='pfAddBtn'){const b=document.getElementById('pfPaste');b.style.display=b.style.display==='none'?'block':'none';document.getElementById('pfStatus').textContent='';}
-  else if(id==='pfCancelBtn'){document.getElementById('pfPaste').style.display='none';}
-  else if(id==='pfParseBtn'){const st=document.getElementById('pfStatus');try{const r=pfParse(document.getElementById('pfText').value);const ym=r.ym||ymKey();const M=pfStore();const arr=(M.prefacturas[ym]=M.prefacturas[ym]||[]);const ix=arr.findIndex(x=>x.id===r.doc.id);if(ix>=0)arr[ix]=r.doc;else arr.push(r.doc);M.pfSeeded[ym]=true;await save();const p=ym.split('-');sel={y:+p[0],m:+p[1]-1};renderAll();if(state.apiUrl){try{await pushData();}catch(_){}}document.getElementById('pfText').value='';document.getElementById('pfPaste').style.display='none';}catch(err){st.innerHTML='<b style="color:#B5732A">⚠ '+err.message+'</b>';}}
-  else if(e.target.classList&&e.target.classList.contains('pfDel')){const ym=ymKey();const arr=pfDocs(ym);const i=+e.target.dataset.i;if(arr[i]&&confirm('¿Eliminar la prefactura '+arr[i].id+'?')){arr.splice(i,1);pfStore().pfSeeded[ym]=true;await save();renderAll();}}
-});
-document.addEventListener('change',async e=>{if(e.target.classList&&e.target.classList.contains('pfArea')){pfStore().pfCanalArea[e.target.dataset.canal]=e.target.value;await save();renderAll();}});
-function renderAll(){ensurePfSeed();renderMonthLabel();renderResumen();renderLicencias();renderWsp();renderMensajes();renderPrefact();}
+function renderAll(){renderMonthLabel();renderResumen();renderLicencias();renderWsp();renderMensajes();}
 
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
